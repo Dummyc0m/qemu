@@ -124,8 +124,8 @@ void qmp_working_set_request(Error **errp)
     }
 }
 
-void qmp_working_set_config(uint64_t i0, uint64_t i1, uint64_t i2,
-                            uint64_t refresh, uint64_t report, Error **errp)
+void qmp_working_set_config(uint32_t i0, uint32_t i1, uint32_t i2,
+                            uint32_t refresh, uint32_t report, Error **errp)
 {
     if (!have_balloon(errp)) {
         return;

@@ -24,6 +24,7 @@
 #include "hw/boards.h"
 #include "sysemu/balloon.h"
 #include "hw/virtio/virtio-balloon.h"
+#include <stdatomic.h>
 #include "exec/address-spaces.h"
 #include "qapi/error.h"
 #include "qapi/qapi-events-machine.h"
@@ -246,8 +247,10 @@ static void virtio_balloon_send_working_set_request(
 
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
-        return;
+      printf("no queue item\n");
+      return;
     }
+    printf("requesting\n");
     notify.op = virtio_tswap16(vdev, VIRTIO_BALLOON_WS_OP_REQUEST);
     notify.node_id = 0;
     sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &notify, sizeof(notify));
@@ -259,14 +262,15 @@ static void virtio_balloon_send_working_set_request(
 
 static void virtio_balloon_send_working_set_config(
     VirtIODevice *vdev, VirtQueue *vq,
-    uint64_t i0, uint64_t i1, uint64_t i2,
-    uint64_t refresh, uint64_t report)
+    uint32_t i0, uint32_t i1, uint32_t i2,
+    uint32_t refresh, uint32_t report)
 {
     VirtQueueElement *elem;
     VirtIOBalloonWorkingSetNotify notify;
     size_t sz = 0;
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
+        warn_report("could not send working set config");
         return;
     }
 
@@ -949,9 +953,9 @@ static void virtio_balloon_working_set_request(void *opaque)
     virtio_balloon_send_working_set_request(vdev, dev->notification_vq);
 }
 
-static void virtio_balloon_working_set_config(void *opaque, uint64_t i0,
-                                              uint64_t i1, uint64_t i2,
-                                              uint64_t refresh, uint64_t report)
+static void virtio_balloon_working_set_config(void *opaque, uint32_t i0,
+                                              uint32_t i1, uint32_t i2,
+                                              uint32_t refresh, uint32_t report)
 {
     VirtIOBalloon *dev = VIRTIO_BALLOON(opaque);
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
