@@ -573,7 +573,7 @@
 # @memory-size-bytes: A MemoryBin with file and anon info.
 ##
 { 'struct': 'WorkingSetInfo',
-  'data': { 'idle-age': 'uint64',
+  'data': { 'idle-age': 'uint32',
             'memory-size-bytes': 'MemoryBin' } }
 
 ##
