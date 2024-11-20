@@ -60,9 +60,6 @@ struct virtio_balloon_config {
 	};
 	/* Stores PAGE_POISON if page poisoning is in use */
 	uint32_t poison_val;
-	/* Stores the number of histogram bins if WS reporting in use */
-	uint8_t working_set_num_bins;
-	uint8_t padding[3];
 };
 
 #define VIRTIO_BALLOON_S_SWAP_IN  0   /* Amount of memory swapped in */
@@ -120,20 +117,47 @@ struct virtio_balloon_stat {
 	__virtio64 val;
 } QEMU_PACKED;
 
-enum virtio_balloon_working_set_op {
-    VIRTIO_BALLOON_WS_REQUEST = 1, /* a Working Set request from the host */
-    VIRTIO_BALLOON_WS_CONFIG = 2,  /* a Working Set config from the host */
+#define WORKINGSET_REPORT_MIN_NR_BINS 2
+#define WORKINGSET_REPORT_MAX_NR_BINS 32
+
+/* This must be the idle_age value in the last bin */
+#define WORKINGSET_INTERVAL_MAX ((unsigned long)-1)
+
+/* Operations from the device */
+#define VIRTIO_BALLOON_WS_OP_REQUEST 0
+#define VIRTIO_BALLOON_WS_OP_CONFIG 1
+
+struct virtio_balloon_working_set_notify {
+	/* REQUEST or CONFIG */
+	uint16_t op;
+	uint16_t node_id;
+	/* the following fields valid iff op=CONFIG */
+	uint32_t report_threshold;
+	uint32_t refresh_interval;
+    /*
+     * The first N elements of this array is an increasing sequence of
+     * idle age in milliseconds. The Nth element must be WORKINGSET_INTERVAL_MAX.
+     *
+     * The idle age for a chunk of memory is the amount of time
+     * it has not been accessed.
+     */
+	uint32_t idle_age[WORKINGSET_REPORT_MAX_NR_BINS];
 };
 
-struct virtio_balloon_working_set {
-	/* A tag for additional metadata */
-	__virtio16 tag;
-	/* The NUMA node for this report. */
-	__virtio16 node_id;
-	uint8_t reserved[4];
-	__virtio64 idle_age_ms;
-	/* A bin each for anonymous and file-backed memory. */
-	__virtio64 memory_size_bytes[2];
-} QEMU_PACKED;
+struct virtio_balloon_working_set_report_bin {
+	uint64_t idle_age;
+	/* bytes in this bucket for anon and file */
+	uint64_t anon_bytes;
+	uint64_t file_bytes;
+};
+
+struct virtio_balloon_working_set_report {
+	uint32_t error;
+	uint32_t node_id;
+	uint64_t timestamp;
+	struct virtio_balloon_working_set_report_bin
+		bins[WORKINGSET_REPORT_MAX_NR_BINS];
+};
+
 
 #endif /* _LINUX_VIRTIO_BALLOON_H */
