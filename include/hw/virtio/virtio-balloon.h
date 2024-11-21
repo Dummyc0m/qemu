@@ -54,9 +54,6 @@ struct VirtIOBalloon {
     uint32_t free_page_hint_cmd_id;
     uint64_t stats[VIRTIO_BALLOON_S_NR];
     WorkingSetInfo ws[VIRTIO_BALLOON_WS_NR_BINS];
-    uint64_t ws_intervals[VIRTIO_BALLOON_WS_NR_BINS - 1];
-    uint64_t ws_refresh_threshold;
-    uint64_t ws_report_threshold;
     VirtQueueElement *stats_vq_elem;
     VirtQueueElement *working_set_vq_elem;
     size_t stats_vq_offset;
