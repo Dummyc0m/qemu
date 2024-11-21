@@ -1513,7 +1513,7 @@ static void hv_balloon_vmdev_realize(VMBusDevice *vdev, Error **errp)
     balloon->state = S_WAIT_RESET;
 
     ret = qemu_add_balloon_handler(hv_balloon_to_target, hv_balloon_stat,
-                                   balloon);
+                                   NULL, NULL, balloon);
     if (ret < 0) {
         /* This also protects against having multiple hv-balloon instances */
         error_setg(errp, "Only one balloon device is supported");

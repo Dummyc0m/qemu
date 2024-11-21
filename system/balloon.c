@@ -119,7 +119,9 @@ void qmp_working_set_request(Error **errp)
         return;
     }
 
-    balloon_ws_request_fn(balloon_opaque);
+    if (balloon_ws_request_fn) {
+        balloon_ws_request_fn(balloon_opaque);
+    }
 }
 
 void qmp_working_set_config(uint64_t i0, uint64_t i1, uint64_t i2,
@@ -129,5 +131,7 @@ void qmp_working_set_config(uint64_t i0, uint64_t i1, uint64_t i2,
         return;
     }
 
-    balloon_ws_config_fn(balloon_opaque, i0, i1, i2, refresh, report);
+    if (balloon_ws_config_fn) {
+        balloon_ws_config_fn(balloon_opaque, i0, i1, i2, refresh, report);
+    }
 }
