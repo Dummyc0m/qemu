@@ -195,9 +195,7 @@ static void virtio_balloon_receive_working_set(VirtIODevice *vdev,
 {
     VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
     VirtQueueElement *elem;
-    VirtIOBalloonWorkingSet ws;
-    size_t offset = 0;
-    int count = 0;
+    VirtIOBalloonWorkingSetReport ws;
 
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
@@ -216,16 +214,26 @@ static void virtio_balloon_receive_working_set(VirtIODevice *vdev,
     /* Initialize the Working Set to get rid of any stale values. */
     reset_working_set(s);
 
-    while (iov_to_buf(elem->out_sg, elem->out_num, offset, &ws,
+    if (iov_to_buf(elem->out_sg, elem->out_num, 0, &ws,
                       sizeof(ws)) == sizeof(ws)) {
-        uint64_t idle_age_ms = virtio_tswap64(vdev, ws.idle_age_ms);
-        uint64_t bytes_anon = virtio_tswap64(vdev, ws.memory_size_bytes[0]);
-        uint64_t bytes_file = virtio_tswap64(vdev, ws.memory_size_bytes[1]);
-        s->ws[count].idle_age = idle_age_ms;
-        s->ws[count].memory_size_bytes->anon = bytes_anon;
-        s->ws[count].memory_size_bytes->file = bytes_file;
-        offset += sizeof(ws);
-        count++;
+        int i;
+        uint32_t error = virtio_tswap64(vdev, ws.error);
+
+        if (error) {
+            warn_report("Couldn't read guest working set report: %s",
+                        strerror(error));
+            return;
+        }
+
+        for (i = 0; i < VIRTIO_BALLOON_WS_NR_BINS; ++i) {
+            uint64_t idle_age_ms = virtio_tswap64(vdev, ws.bins[i].idle_age);
+            uint64_t bytes_anon = virtio_tswap64(vdev, ws.bins[i].anon_bytes);
+            uint64_t bytes_file = virtio_tswap64(vdev, ws.bins[i].file_bytes);
+
+            s->ws[i].idle_age = idle_age_ms;
+            s->ws[i].memory_size_bytes->anon = bytes_anon;
+            s->ws[i].memory_size_bytes->file = bytes_file;
+        }
     }
 }
 
@@ -234,15 +242,16 @@ static __attribute__((unused)) void virtio_balloon_send_working_set_request(
 {
     VirtQueueElement *elem;
     size_t sz = 0;
-    uint16_t tag = 0;
+    VirtIOBalloonWorkingSetNotify notify;
 
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
         return;
     }
-    tag = VIRTIO_BALLOON_WS_REQUEST;
-    sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &tag, sizeof(tag));
-    assert(sz == sizeof(tag));
+    notify.op = virtio_tswap16(vdev, VIRTIO_BALLOON_WS_OP_REQUEST);
+    notify.node_id = 0;
+    sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &notify, sizeof(notify));
+    assert(sz == sizeof(notify));
     virtqueue_push(vq, elem, sz);
     virtio_notify(vdev, vq);
     g_free(elem);
@@ -253,31 +262,25 @@ static __attribute__((unused)) void virtio_balloon_send_working_set_config(
     uint64_t i0, uint64_t i1, uint64_t i2,
     uint64_t refresh, uint64_t report)
 {
-    VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
     VirtQueueElement *elem;
-    uint16_t tag = 0;
+    VirtIOBalloonWorkingSetNotify notify;
     size_t sz = 0;
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
         return;
     }
 
-    tag = VIRTIO_BALLOON_WS_CONFIG;
-    s->ws_intervals[0] = i0;
-    s->ws_intervals[1] = i1;
-    s->ws_intervals[2] = i2;
-    s->ws_refresh_threshold = refresh;
-    s->ws_report_threshold = report;
+    notify.op = virtio_tswap16(vdev, VIRTIO_BALLOON_WS_OP_CONFIG);
+    notify.node_id = 0;
+    notify.refresh_interval = virtio_tswap32(vdev, refresh);
+    notify.report_threshold = virtio_tswap32(vdev, report);
+    notify.idle_age[0] = virtio_tswap32(vdev, (uint32_t)i0);
+    notify.idle_age[1] = virtio_tswap32(vdev, (uint32_t)i1);
+    notify.idle_age[2] = virtio_tswap32(vdev, (uint32_t)i2);
+    notify.idle_age[3] = virtio_tswap32(vdev, (uint32_t)WORKINGSET_INTERVAL_MAX);
 
-    sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &tag, sizeof(tag));
-    assert(sz == sizeof(uint16_t));
-    sz += iov_from_buf(elem->in_sg, elem->in_num, sz, s->ws_intervals,
-                       (VIRTIO_BALLOON_WS_NR_BINS - 1) * \
-                       sizeof(s->ws_intervals[0]));
-    sz += iov_from_buf(elem->in_sg, elem->in_num, sz, &s->ws_refresh_threshold,
-                       sizeof(uint64_t));
-    sz += iov_from_buf(elem->in_sg, elem->in_num, sz, &s->ws_report_threshold,
-                       sizeof(uint64_t));
+    sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &notify, sizeof(notify));
+    assert(sz == sizeof(notify));
     virtqueue_push(vq, elem, sz);
     virtio_notify(vdev, vq);
     g_free(elem);
@@ -811,11 +814,8 @@ static size_t virtio_balloon_config_size(VirtIOBalloon *s)
     if (s->qemu_4_0_config_size) {
         return sizeof(struct virtio_balloon_config);
     }
-    if (virtio_has_feature(features, VIRTIO_BALLOON_F_WS_REPORTING)) {
-        return sizeof(struct virtio_balloon_config);
-   }
     if (virtio_has_feature(features, VIRTIO_BALLOON_F_PAGE_POISON)) {
-        return offsetof(struct virtio_balloon_config, working_set_num_bins);
+        return sizeof(struct virtio_balloon_config);
     }
     if (virtio_has_feature(features, VIRTIO_BALLOON_F_FREE_PAGE_HINT)) {
         return offsetof(struct virtio_balloon_config, poison_val);
@@ -831,7 +831,6 @@ static void virtio_balloon_get_config(VirtIODevice *vdev, uint8_t *config_data)
     config.num_pages = cpu_to_le32(dev->num_pages);
     config.actual = cpu_to_le32(dev->actual);
     config.poison_val = cpu_to_le32(dev->poison_val);
-    config.working_set_num_bins = (uint8_t) VIRTIO_BALLOON_WS_NR_BINS;
 
     if (dev->free_page_hint_status == FREE_PAGE_HINT_S_REQUESTED) {
         config.free_page_hint_cmd_id =
@@ -866,14 +865,6 @@ static bool virtio_balloon_page_poison_support(void *opaque)
     return virtio_vdev_has_feature(vdev, VIRTIO_BALLOON_F_PAGE_POISON);
 }
 
-static bool virtio_balloon_working_set_reporting_support(void *opaque)
-{
-    VirtIOBalloon *s = opaque;
-    VirtIODevice *vdev = VIRTIO_DEVICE(s);
-
-    return virtio_vdev_has_feature(vdev, VIRTIO_BALLOON_F_WS_REPORTING);
-}
-
 static void virtio_balloon_set_config(VirtIODevice *vdev,
                                       const uint8_t *config_data)
 {
@@ -891,10 +882,6 @@ static void virtio_balloon_set_config(VirtIODevice *vdev,
     dev->poison_val = 0;
     if (virtio_balloon_page_poison_support(dev)) {
         dev->poison_val = le32_to_cpu(config.poison_val);
-    }
-    dev->working_set_num_bins = 0;
-    if (virtio_balloon_working_set_reporting_support(dev)) {
-        dev->working_set_num_bins = config.working_set_num_bins;
     }
     trace_virtio_balloon_set_config(dev->actual, oldactual);
 }

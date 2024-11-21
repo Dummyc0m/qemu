@@ -29,7 +29,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(VirtIOBalloon, VIRTIO_BALLOON)
 #define VIRTIO_BALLOON_WS_NR_BINS 4  /* Number of bins in Working Set report */
 
 typedef struct virtio_balloon_stat VirtIOBalloonStat;
-typedef struct virtio_balloon_working_set VirtIOBalloonWorkingSet;
+typedef struct virtio_balloon_working_set_report VirtIOBalloonWorkingSetReport;
+typedef struct virtio_balloon_working_set_notify VirtIOBalloonWorkingSetNotify;
 
 typedef struct virtio_balloon_stat_modern {
        uint16_t tag;

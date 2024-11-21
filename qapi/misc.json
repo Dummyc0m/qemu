@@ -566,7 +566,7 @@
 ##
 # @WorkingSetInfo:
 #
-# A bin of memory of the given size that has been idle at most `idle-age` ms
+# A bin of memory of the given size that has been idle at most 'idle-age' ms
 #
 # @idle-age: guest-relative time (in milliseconds)
 #
