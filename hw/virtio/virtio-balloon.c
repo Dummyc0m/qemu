@@ -218,11 +218,11 @@ static void virtio_balloon_receive_working_set(VirtIODevice *vdev,
     if (iov_to_buf(elem->out_sg, elem->out_num, 0, &ws,
                       sizeof(ws)) == sizeof(ws)) {
         int i;
-        uint32_t error = virtio_tswap64(vdev, ws.error);
+        int error = virtio_tswap32(vdev, ws.error);
 
         if (error) {
             warn_report("Couldn't read guest working set report: %s",
-                        strerror(error));
+                        strerror(-error));
             return;
         }
 
@@ -247,10 +247,9 @@ static void virtio_balloon_send_working_set_request(
 
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) {
-      printf("no queue item\n");
-      return;
+        warn_report("could not request working set report");
+        return;
     }
-    printf("requesting\n");
     notify.op = virtio_tswap16(vdev, VIRTIO_BALLOON_WS_OP_REQUEST);
     notify.node_id = 0;
     sz = iov_from_buf(elem->in_sg, elem->in_num, 0, &notify, sizeof(notify));

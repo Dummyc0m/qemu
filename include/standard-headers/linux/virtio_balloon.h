@@ -124,8 +124,8 @@ struct virtio_balloon_stat {
 #define WORKINGSET_INTERVAL_MAX ((unsigned long)-1)
 
 /* Operations from the device */
-#define VIRTIO_BALLOON_WS_OP_REQUEST 0
-#define VIRTIO_BALLOON_WS_OP_CONFIG 1
+#define VIRTIO_BALLOON_WS_OP_REQUEST 1
+#define VIRTIO_BALLOON_WS_OP_CONFIG 2
 
 struct virtio_balloon_working_set_notify {
 	/* REQUEST or CONFIG */
@@ -154,10 +154,8 @@ struct virtio_balloon_working_set_report_bin {
 struct virtio_balloon_working_set_report {
 	uint32_t error;
 	uint32_t node_id;
-	uint64_t timestamp;
 	struct virtio_balloon_working_set_report_bin
 		bins[WORKINGSET_REPORT_MAX_NR_BINS];
 };
-
 
 #endif /* _LINUX_VIRTIO_BALLOON_H */
